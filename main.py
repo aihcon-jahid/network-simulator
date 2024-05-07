@@ -2,58 +2,92 @@ import psycopg2
 
 class NetworkSimulator:
     def __init__(self):
-        # Establishing connection to PostgreSQL database
-        self.conn = psycopg2.connect(
-            dbname="network_simulation",
-            user="aihcon",
-            password="27673855",
-            host="localhost"
-        )
-        self.cur = self.conn.cursor()
+        self.nodes = []
+        self.edges = []
 
-    def add_node(self, node_id, description, location):
-        # Adding a node to the network
-        self.cur.execute("INSERT INTO NodeDetails (node_id, description, location) VALUES (%s, %s, %s)", (node_id, description, location))
-        self.conn.commit()
+    def add_node(self, node):
+        self.nodes.append(node)
 
-    def add_edge(self, source, destination, weight):
-        # Adding an edge (connection) between nodes with a certain weight
-        self.cur.execute("INSERT INTO NetworkEvents (event_type, event_description) VALUES (%s, %s)", ("DataTransmission", f"Sending data from {source} to {destination} with weight {weight}"))
-        self.conn.commit()
+    def add_edge(self, edge):
+        self.edges.append(edge)
 
     def create_topology(self):
-        # Displaying the network topology
-        self.cur.execute("SELECT node_id, ARRAY(SELECT node_id FROM NodeDetails WHERE node_id != n.node_id) as neighbors FROM NodeDetails n")
-        rows = self.cur.fetchall()
+        topology = {}
+        for node in self.nodes:
+            topology[node] = []
+        for edge in self.edges:
+            source, destination = edge
+            topology[source].append(destination)
+            topology[destination].append(source)
         print("Network Topology:")
-        for row in rows:
-            print(f"Node {row[0]} is connected to: {', '.join(map(str, row[1]))}")
+        for node, neighbors in topology.items():
+            print(f"Node {node} is connected to: {', '.join(neighbors)}")
 
     def simulate_network(self):
-        # Simulating network behavior by retrieving and displaying network events
-        self.cur.execute("SELECT event_description FROM NetworkEvents WHERE event_type = 'DataTransmission'")
-        rows = self.cur.fetchall()
         print("Simulating network behavior...")
-        for row in rows:
-            print(row[0])
+        for node in self.nodes:
+            neighbors = self.get_neighbors(node)
+            print(f"Node {node} is connected to: {', '.join(neighbors)}")
 
-    def close_connection(self):
-        # Closing the database connection
-        self.cur.close()
-        self.conn.close()
+    def get_neighbors(self, node):
+        return [edge[1] for edge in self.edges if edge[0] == node or edge[1] == node]
 
-# Instantiate the network simulator
+
+# Connect to PostgreSQL database
+conn = psycopg2.connect(
+    dbname="network_simulation",
+    user="khadiza",
+    password="12345678",
+    host="localhost",
+    port="5432"
+)
+cur = conn.cursor()
+
+# Create table for NodeDetails if not exists
+cur.execute("""
+    CREATE TABLE IF NOT EXISTS NodeDetails (
+        id SERIAL PRIMARY KEY,
+        node_id INT NOT NULL,
+        description TEXT,
+        location VARCHAR(255)
+    );
+""")
+
+# Create table for NetworkEvents if not exists
+cur.execute("""
+    CREATE TABLE IF NOT EXISTS NetworkEvents (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(255) NOT NULL,
+        event_description TEXT,
+        event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+""")
+
+# Insert data into NodeDetails
+node_data = [
+    (1, 'Main server node', 'Data center A'),
+    (2, 'Backup server node', 'Data center B')
+]
+cur.executemany("INSERT INTO NodeDetails (node_id, description, location) VALUES (%s, %s, %s)", node_data)
+
+# Insert data into NetworkEvents
+event_data = [
+    ('NodeFailure', 'Node1 is down'),
+    ('NodeRecovery', 'Node1 is back up')
+]
+cur.executemany("INSERT INTO NetworkEvents (event_type, event_description) VALUES (%s, %s)", event_data)
+
+# Commit changes to the database
+conn.commit()
+cur.close()
+conn.close()
+
+# Create NetworkSimulator instance
 simulator = NetworkSimulator()
-
-# Add nodes and edges
-simulator.add_node(1, 'Main server node', 'Data center A')
-simulator.add_node(2, 'Backup server node', 'Data center B')
-simulator.add_edge(1, 2, 5)
-simulator.add_edge(2, 3, 3)
-
-# Create and simulate network
+simulator.add_node("Node1")
+simulator.add_node("Node2")
+simulator.add_node("Node3")
+simulator.add_edge(("Node1", "Node2"))
+simulator.add_edge(("Node2", "Node3"))
 simulator.create_topology()
 simulator.simulate_network()
-
-# Close the connection
-simulator.close_connection()
